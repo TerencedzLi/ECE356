@@ -1,14 +1,13 @@
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.metrics import accuracy_score
-from sklearn.feature_extraction import DictVectorizer
-import pandas as pd
-import numpy as np
-import pymysql
 import json
 import operator
-import random
 import os
+import pandas as pd
+import pymysql
+from sklearn import metrics
+from sklearn import tree
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction import DictVectorizer
+
 
 
 class DatabaseConnector:
@@ -62,7 +61,7 @@ class DatabaseConnector:
 
     def get_reviews_from_user(self):
         with self.connection.cursor() as cursor:
-            sql = "SELECT review.stars as stars, name, neighborhood, address, city, state, postal_code, business.stars as average_stars, review_count, category" \
+            sql = "SELECT review.stars as stars, name, address, city, postal_code, business.stars as average_stars, review_count, category" \
                   " FROM review INNER JOIN business ON review.business_id = business.id INNER JOIN category ON category.business_id = review.business_id " \
                   "WHERE user_id = \"{}\"".format(self.user['user_id'])
             cursor.execute(sql)
@@ -86,19 +85,23 @@ def classify(results):
     x_results = vec.fit_transform(results)
     x = pd.DataFrame(x_results)
 
-    print len(x), len(y)
-
     # 50/50 distribution of training to testing samples
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, stratify=y, random_state=123456)
 
-    clf = RandomForestClassifier(max_depth=5, random_state=123456)
+    clf = tree.DecisionTreeClassifier(max_depth=25)
     clf.fit(x_train, y_train)
 
-    predicted = clf.predict(x_test)
-    accuracy = accuracy_score(y_test, predicted)
-    print accuracy
-    scores = cross_val_score(clf, x, y, cv=5)
-    print scores.mean()
+    preds = clf.predict(x_test)
+    accuracy = metrics.accuracy_score(y_test, preds)
+    report = metrics.classification_report(y_test, preds)
+    matrix = metrics.confusion_matrix(y_test, preds)
+    print(matrix)
+
+    tree.export_graphviz(clf, out_file='tree.dot')
+    # Convert to jpg using dot -Tjpg tree.dot > tree.jpg
+
+    print report
+    print "Accuracy: {}".format(accuracy)
 
 connector = DatabaseConnector()
 connector.user_reviews = connector.get_reviews_from_user()
