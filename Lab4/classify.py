@@ -1,7 +1,12 @@
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import accuracy_score
+from sklearn.feature_extraction import DictVectorizer
+import pandas as pd
+import numpy as np
 import pymysql
 import json
 import operator
-import sklearn
 import random
 import os
 
@@ -57,18 +62,43 @@ class DatabaseConnector:
 
     def get_reviews_from_user(self):
         with self.connection.cursor() as cursor:
-            sql = "SELECT review.stars as stars, name, neighborhood, address, city, state, postal_code, business.stars as average_stars, review_count" \
-                  " FROM review INNER JOIN business ON review.business_id = business.id WHERE user_id = \"{}\"".format(self.user['user_id'])
+            sql = "SELECT review.stars as stars, name, neighborhood, address, city, state, postal_code, business.stars as average_stars, review_count, category" \
+                  " FROM review INNER JOIN business ON review.business_id = business.id INNER JOIN category ON category.business_id = review.business_id " \
+                  "WHERE user_id = \"{}\"".format(self.user['user_id'])
             cursor.execute(sql)
             results = cursor.fetchall()
             return results
 
 
 def classify(results):
+    for r in results:
+        r['name'] = unicode(r['name'], "utf-8", errors='replace')
+        r['address'] = unicode(r['address'], "utf-8", errors='replace')
+
+    vec = DictVectorizer(sparse=False)
+
+    df = pd.DataFrame(results)
+    target = 'stars'
+    y = df[target]
+
+    for r in results:
+        del r['stars']
+    x_results = vec.fit_transform(results)
+    x = pd.DataFrame(x_results)
+
+    print len(x), len(y)
+
     # 50/50 distribution of training to testing samples
-    training_set = random.sample(results, len(results) / 2)
-    test_set = [r for r in results if r not in training_set]
-    print len(results), len(training_set), len(test_set)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, stratify=y, random_state=123456)
+
+    clf = RandomForestClassifier(max_depth=5, random_state=123456)
+    clf.fit(x_train, y_train)
+
+    predicted = clf.predict(x_test)
+    accuracy = accuracy_score(y_test, predicted)
+    print accuracy
+    scores = cross_val_score(clf, x, y, cv=5)
+    print scores.mean()
 
 connector = DatabaseConnector()
 connector.user_reviews = connector.get_reviews_from_user()
