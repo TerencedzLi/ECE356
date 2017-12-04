@@ -72,6 +72,7 @@ class DatabaseConnector:
                     ORDER BY count DESC, std_dev DESC
                     LIMIT 2000) as t
                 ON business.id = t.business_id
+                INNER JOIN category on category.business_id = business.id
                 """
             cursor.execute(sql)
             results = cursor.fetchmany(2000)
@@ -92,4 +93,3 @@ class DatabaseConnector:
             cursor.execute(sql)
             results = cursor.fetchall()
             return results
-
