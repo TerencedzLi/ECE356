@@ -1,0 +1,1 @@
+{"count": 240, "std_dev": 1.25786415094088, "avg_stars": 2.9667, "user_id": "ELcQDlf69kb-ihJfxZyL0A"}

@@ -15,6 +15,7 @@ class DatabaseConnector:
         self.connection = self.connect_database()
         self.user = self.get_user()
         self.user_reviews = {}
+        self.businesses = self.get_businesses()
 
     def connect_database(self):
         # Must have a credentials file with user and password stored in a JSON object
@@ -59,6 +60,35 @@ class DatabaseConnector:
                 json.dump(top_std_dev, outfile)
             return top_std_dev
 
+    def get_businesses(self):
+        # If user info is already in a file
+        txt_file = 'businesses.txt'
+        if os.path.exists(txt_file) and os.path.getsize(txt_file) > 0:
+            with open(txt_file) as infile:
+                return json.load(infile)
+        with self.connection.cursor() as cursor:
+            sql = """
+                SELECT *
+                FROM business
+                INNER JOIN
+                    (SELECT business_id, count(business_id) as count, avg(stars) as avg_stars, stddev(stars) as std_dev
+                    FROM review
+                    GROUP BY business_id
+                    ORDER BY count DESC, std_dev DESC
+                    LIMIT 2000) as t
+                ON business.id = t.business_id
+                """
+            cursor.execute(sql)
+            results = cursor.fetchmany(2000)
+            # Convert avg_stars from Decimal object to float to enable JSON serialization
+            for r in results:
+                r['avg_stars'] = float(r['avg_stars'])
+                r['city'] = unicode(r['city'], "utf-8", errors='replace')
+                r['name'] = unicode(r['name'], "utf-8", errors='replace')
+            with open(txt_file, 'w') as outfile:
+                json.dump(results, outfile)
+            return results
+
     def get_reviews_from_user(self):
         with self.connection.cursor() as cursor:
             sql = "SELECT review.stars as stars, name, address, city, postal_code, business.stars as average_stars, review_count, category" \
@@ -86,9 +116,9 @@ def classify(results):
     x = pd.DataFrame(x_results)
 
     # 50/50 distribution of training to testing samples
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.1, stratify=y, random_state=123456)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.5, stratify=y, random_state=123456)
 
-    clf = tree.DecisionTreeClassifier(max_depth=25)
+    clf = tree.DecisionTreeClassifier(max_depth=30)
     clf.fit(x_train, y_train)
 
     preds = clf.predict(x_test)
@@ -104,6 +134,6 @@ def classify(results):
     print "Accuracy: {}".format(accuracy)
 
 connector = DatabaseConnector()
-connector.user_reviews = connector.get_reviews_from_user()
-classify(connector.user_reviews)
+# connector.user_reviews = connector.get_reviews_from_user()
+# classify(connector.user_reviews)
 
